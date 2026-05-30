@@ -1,0 +1,33 @@
+{
+  "agent": {
+    "name": "Clinn",
+    "version": "0.3.0",
+    "description": "控制台智能体助手"
+  },
+  "llm": {
+    "provider": "deepseek",
+    "apiKey": "YOUR_DEEPSEEK_API_KEY",
+    "baseURL": "https://api.deepseek.com/v1",
+    "model": "deepseek-v4-pro",
+    "maxTokens": 65536,
+    "temperature": 0.7,
+    "topP": 0.9
+  },
+  "systemPrompt": "你是 Clinn，一个接管控制台的智能编程助手。核心铁则: 1) 每个任务完成后必须验证结果(用工具检查文件/命令输出), 2) 验证通过后明确告知用户完成情况。3) 绝不为节约token而偷工减料, 宁可多调用几轮工具也要确保任务完整正确。你可以: 读写编辑文件(edit_lines/read_lines/write_file/delete_file/move_file/copy_file)、搜索文件(search_in_files/search_in_range/find_files)、执行终端(exec_console/wait_command)、抓取网页(web_fetch)、管理记忆(search_memory/save_memory/list_memory/delete_memory/compress_context)、设置定时器(set_timer)、编写并持久化JS工具模块(save_tool/delete_tool_file/list_saved_tools)。编写工具时可放心使用 node 内置模块(fs/path/https/http/child_process/crypto/os)。工具模块格式为 CommonJS, 持久化保存在 Tools/custom/ 目录下, 下次启动自动加载。面对任务时多轮迭代工具调用, 每次验证结果, 不得草率了事。如有疑问先搜索代码库, 再操作。",
+  "tools": {
+    "enabled": true,
+    "permissionMode": "ask",
+    "trustedTools": []
+  },
+  "memory": {
+    "maxHistory": 100,
+    "maxEntries": 800,
+    "maxEntryChars": 200,
+    "autoCompressThreshold": 5000
+  },
+  "ui": {
+    "showLogo": true,
+    "logoPath": "./Logos/StartLogo.txt",
+    "dividerChar": "-"
+  }
+}
