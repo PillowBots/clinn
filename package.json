@@ -1,8 +1,8 @@
 {
   "name": "@ghenya/clinn",
-  "version": "0.7.15",
-  "description": "终端原生 AI 编程助手 — DeepSeek 驱动，50+ 工具，对话记忆，虚拟浏览器",
-  "main": "Src/index.js",
+  "version": "0.8.2",
+  "description": "终端原生 AI 编程助手 — DeepSeek 驱动，50+ 工具，对话记忆，虚拟浏览器，Ink 全屏界面",
+  "main": "Src/index.jsx",
   "bin": {
     "clinn": "bin/clinn.js"
   },
@@ -14,14 +14,14 @@
     "bin/",
     "config.json",
     "README.md",
-    "install.js",
+    "install.cjs",
     "install.sh",
     "install.bat"
   ],
   "scripts": {
-    "postinstall": "node install.js",
-    "start": "node Src/index.js",
-    "lint": "node --check Src/index.js && node --check Src/agent.js && node --check Src/llm.js && node --check Tools/index.js && node --check Tools/extended_tools.js && node --check Tools/search_tools.js && node --check Tools/browser.js && node --check Mem/index.js && node --check Mem/history.js"
+    "postinstall": "node install.cjs",
+    "start": "npx tsx Src/index.jsx",
+    "lint": "node --check Src/agent.cjs && node --check Src/llm.cjs && node --check Tools/index.js && node --check Tools/extended_tools.js && node --check Tools/search_tools.js && node --check Tools/browser.js && node --check Tools/file_tools.js && node --check Tools/edit_tools.js && node --check Tools/tokenizer.js && node --check Mem/index.js && node --check Mem/history.js"
   },
   "keywords": [
     "ai",
@@ -31,7 +31,10 @@
     "terminal",
     "coding-assistant",
     "llm",
-    "chatbot"
+    "chatbot",
+    "ink",
+    "react",
+    "tui"
   ],
   "author": "PillowBots",
   "license": "MIT",
@@ -43,11 +46,16 @@
   "bugs": {
     "url": "https://github.com/PillowBots/clinn/issues"
   },
-  "type": "commonjs",
+  "type": "module",
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=18.0.0"
   },
   "dependencies": {
-    "puppeteer-core": "^25.1.0"
+    "puppeteer-core": "^25.1.0",
+    "ink": "^5.2.0",
+    "ink-text-input": "^6.0.0",
+    "ink-spinner": "^5.0.0",
+    "react": "^18.3.1",
+    "tsx": "^4.0.0"
   }
 }

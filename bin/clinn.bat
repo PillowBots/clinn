@@ -1,2 +1,2 @@
 @echo off
-node "%~dp0\..\Src\index.js" %*
+node --import tsx "%~dp0\..\Src\index.jsx" %*
