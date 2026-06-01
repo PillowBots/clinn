@@ -160,8 +160,7 @@ Clinn/
 ├── install.bat         # Windows 安装脚本
 ├── clinn.bat           # Windows 快捷启动
 ├── package.json
-└── public/             # 发布版本
-    └── clinn-v0.7.1/
+
 ```
 
 ---
