@@ -17,7 +17,7 @@ let toolRegistry = {
 
 let permissionCallback = null;
 let trustedNames = new Set();
-const CUSTOM_DIR = path.join(__dirname, "custom");
+const CUSTOM_DIR = path.join(require("os").homedir(), ".clinn", "Tools", "custom");
 
 function loadCustomTools() {
   if (!fs.existsSync(CUSTOM_DIR)) return;

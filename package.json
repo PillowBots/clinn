@@ -1,26 +1,49 @@
 {
-  "name": "clinn",
-  "version": "0.7.0",
-  "description": "Clinn — 智能编程助手，DeepSeek 驱动，终端原生 AI Agent",
+  "name": "@ghenya/clinn",
+  "version": "0.7.7",
+  "description": "终端原生 AI 编程助手 — DeepSeek 驱动，50+ 工具，对话记忆，虚拟浏览器",
   "main": "Src/index.js",
   "bin": {
-    "clinn": "Src/index.js"
+    "clinn": "bin/clinn.sh"
   },
+  "files": [
+    "Src/",
+    "Tools/",
+    "Mem/",
+    "Logos/",
+    "bin/",
+    "config.json",
+    "README.md"
+  ],
   "scripts": {
     "start": "node Src/index.js",
     "lint": "node --check Src/index.js && node --check Src/agent.js && node --check Src/llm.js && node --check Tools/index.js && node --check Tools/extended_tools.js && node --check Tools/search_tools.js && node --check Tools/browser.js && node --check Mem/index.js && node --check Mem/history.js"
   },
-  "keywords": ["ai", "agent", "cli", "deepseek", "terminal"],
-  "author": "",
+  "keywords": [
+    "ai",
+    "agent",
+    "cli",
+    "deepseek",
+    "terminal",
+    "coding-assistant",
+    "llm",
+    "chatbot"
+  ],
+  "author": "PillowBots",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PillowBots/clinn"
+  },
+  "homepage": "https://github.com/PillowBots/clinn#readme",
+  "bugs": {
+    "url": "https://github.com/PillowBots/clinn/issues"
+  },
   "type": "commonjs",
   "engines": {
     "node": ">=16.0.0"
   },
   "dependencies": {
-    "puppeteer-core": "^25.1.0"
-  },
-  "optionalDependencies": {
     "puppeteer-core": "^25.1.0"
   }
 }

@@ -1,7 +1,8 @@
 const fs = require("fs");
 const path = require("path");
+const os = require("os");
 
-const MEM_DIR = path.join(__dirname, "..", "mem");
+const MEM_DIR = path.join(os.homedir(), ".clinn", "mem");
 
 function ensureDir() {
   if (!fs.existsSync(MEM_DIR)) fs.mkdirSync(MEM_DIR, { recursive: true });

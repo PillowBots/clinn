@@ -4,6 +4,8 @@
 
 Clinn 是一个运行在终端里的 AI Agent，直接和你的文件系统、Shell、网络交互。不需要 IDE、不需要插件——打开终端，说人话，它帮你干活。
 
+🌐 官方网站：[yxpil.com](https://yxpil.com)
+
 ```
 ██████  ██      ██ ███    ██ ███    ██
 ██      ██      ██ ████   ██ ████   ██
@@ -16,19 +18,7 @@ Clinn 是一个运行在终端里的 AI Agent，直接和你的文件系统、Sh
 
 ## 安装
 
-### npm（推荐）
-
-```bash
-npm install -g @ghenya/clinn
-```
-
-安装后在终端输入 `clinn` 即可启动。首次运行会自动在 `~/.clinn/` 创建配置文件。
-
-配置路径：`~/.clinn/config.json`  ·  历史记录：`~/.clinn/mem/`  ·  自定义工具：`~/.clinn/Tools/custom/`
-
-或终端内直接 `/api key <KEY>` 设置 API Key，无需编辑文件。
-
-### 手动安装 (macOS / Linux / WSL)
+### macOS / Linux / WSL
 
 ```bash
 git clone https://github.com/PillowBots/clinn.git
@@ -160,7 +150,8 @@ Clinn/
 ├── install.bat         # Windows 安装脚本
 ├── clinn.bat           # Windows 快捷启动
 ├── package.json
-
+└── public/             # 发布版本
+    └── clinn-v0.7.1/
 ```
 
 ---
@@ -194,11 +185,15 @@ Clinn/
 
 ## 更新日志 (Changelog)
 
-### v0.7.1 — CLI 增强 & npm 发布
+### v0.7.1 — CLI 增强
 
-- **`/api` 命令**：直接在终端配置 API Key、API 地址、模型名称
-- **npm 发布**：`npm install -g @ghenya/clinn` 全球安装
-- v0.7.2-0.7.5：Windows 兼容性修复，bin 入口 `.bat`/`.sh` 双平台适配
+- **`/api` 命令**：直接在终端配置 API Key、API 地址、模型名称，无需编辑文件
+  - `/api` — 查看当前 API 设置（Key 脱敏显示）
+  - `/api key <KEY>` — 直接设置 API Key
+  - `/api url <URL>` — 切换 API 地址（兼容其他兼容接口）
+  - `/api model <MODEL>` — 切换模型
+- **npm 发布**：`npm install -g @ghenya/clinn` 全球安装，配置自动存 `~/.clinn/`
+- **历史/Mem/自定义工具路径统一到 `~/.clinn/`**
 
 ### v0.7.0 — 交互重构 & 稳定性
 
@@ -233,5 +228,3 @@ Clinn/
 ## 许可
 
 MIT License
-网址
-https://yxpil.com/post.html?id=1780284203267

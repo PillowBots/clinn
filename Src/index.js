@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const os = require("os");
 const readline = require("readline");
 const { spawn } = require("child_process");
 const Agent = require("./agent");
@@ -33,15 +34,29 @@ function emoji(key) {
   return config.ui?.emoji?.[key] || "";
 }
 
+const CLINN_DIR = path.join(os.homedir(), ".clinn");
+const CLINN_CONFIG = path.join(CLINN_DIR, "config.json");
+const PKG_CONFIG = path.join(__dirname, "..", "config.json");
+
+function ensureClinnDir() {
+  if (!fs.existsSync(CLINN_DIR)) fs.mkdirSync(CLINN_DIR, { recursive: true });
+}
+
 function loadConfig() {
-  const configPath = path.join(__dirname, "..", "config.json");
-  const raw = fs.readFileSync(configPath, "utf-8");
-  config = JSON.parse(raw);
+  ensureClinnDir();
+  if (fs.existsSync(CLINN_CONFIG)) {
+    const raw = fs.readFileSync(CLINN_CONFIG, "utf-8");
+    config = JSON.parse(raw);
+  } else {
+    const raw = fs.readFileSync(PKG_CONFIG, "utf-8");
+    config = JSON.parse(raw);
+    fs.writeFileSync(CLINN_CONFIG, JSON.stringify(config, null, 2), "utf-8");
+  }
 }
 
 function saveConfig() {
-  const configPath = path.join(__dirname, "..", "config.json");
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+  ensureClinnDir();
+  fs.writeFileSync(CLINN_CONFIG, JSON.stringify(config, null, 2), "utf-8");
 }
 
 function maxWidth() {
@@ -350,6 +365,10 @@ function showHelp() {
     ["/trusted", "查看受信任工具"], ["/trust <name>", "永久信任工具"],
     ["/untrust <name>", "取消信任"], ["/status", "查看当前状态"],
     ["/ctx", "查看上下文使用量"],
+    ["/api", "查看/配置 API 设置"],
+    ["/api key <KEY>", "设置 API Key"],
+    ["/api url <URL>", "设置 API 地址"],
+    ["/api model <MODEL>", "设置模型名称"],
   ];
   for (const [cmd, desc] of cmds) {
     console.log(`  ${C.yellow + cmd.padEnd(22) + C.reset} ${desc}`);
@@ -469,6 +488,42 @@ async function handleSlashCommand(input) {
       console.log(`  累计消耗: ▾${usage.prompt}  ▴${usage.completion}  ∑${usage.prompt + usage.completion}`);
       console.log(`  提示: 上下文 >80% 时可输入 /compress 压缩或让AI调用 forget_conversation`);
       console.log(div());
+      break;
+    }
+    case "api": {
+      const subParts = rest.trim().split(/\s+/);
+      const sub = subParts[0]?.toLowerCase();
+      const val = subParts.slice(1).join(" ").trim();
+      if (sub === "key") {
+        if (!val) { console.log(`用法: /api key <你的API Key>`); break; }
+        if (val.length < 10) { console.log(`${C.red}Key 太短，请检查${C.reset}`); break; }
+        config.llm.apiKey = val;
+        saveConfig();
+        buildAgent();
+        console.log(`${C.green}API Key 已更新 (${val.slice(0, 8)}...)${C.reset}`);
+      } else if (sub === "url") {
+        if (!val) { console.log(`用法: /api url <API地址>\n  例: /api url https://api.deepseek.com/v1`); break; }
+        config.llm.baseURL = val.replace(/\/+$/, "");
+        saveConfig();
+        buildAgent();
+        console.log(`${C.green}API 地址已更新: ${config.llm.baseURL}${C.reset}`);
+      } else if (sub === "model") {
+        if (!val) { console.log(`用法: /api model <模型名>\n  例: /api model deepseek-chat`); break; }
+        config.llm.model = val;
+        saveConfig();
+        buildAgent();
+        console.log(`${C.green}模型已更新: ${config.llm.model}${C.reset}`);
+      } else {
+        const masked = config.llm.apiKey ? `${config.llm.apiKey.slice(0, 8)}...${config.llm.apiKey.slice(-4)}` : "(未设置)";
+        console.log(div());
+        console.log(`  ${C.bold}API 设置${C.reset}`);
+        console.log(`  Key:     ${C.dim}${masked}${C.reset}`);
+        console.log(`  URL:     ${C.cyan}${config.llm.baseURL}${C.reset}`);
+        console.log(`  Model:   ${C.bold}${config.llm.model}${C.reset}`);
+        console.log(`  温度:    ${config.llm.temperature}  |  MaxTokens: ${config.llm.maxTokens}`);
+        console.log(div());
+        console.log(`  设置: /api key <KEY>  |  /api url <URL>  |  /api model <MODEL>`);
+      }
       break;
     }
     case "tool_search": {

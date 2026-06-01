@@ -256,17 +256,6 @@ class Agent {
 
           if (onToolCall) onToolCall(fnName, fnArgs, i + 1);
 
-          const tool = Tools.getTool(fnName);
-          if (tool?.dangerous) {
-            const allowed = await Tools.checkPermission(fnName, fnArgs);
-            if (!allowed) {
-              if (onToolResult) onToolResult(fnName, "[被拒绝]");
-              toolMsgs.push({ role: "tool", tool_call_id: tc.id, name: fnName, content: "[被用户拒绝]" });
-              allMsgs.push({ role: "tool", name: fnName, content: "[被用户拒绝]" });
-              continue;
-            }
-          }
-
           let toolResult;
           try { toolResult = await Tools.executeTool(fnName, fnArgs); }
           catch (e) { toolResult = `error: ${e.message}`; }
