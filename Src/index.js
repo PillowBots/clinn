@@ -1,6 +1,5 @@
 const fs = require("fs");
 const path = require("path");
-const os = require("os");
 const readline = require("readline");
 const { spawn } = require("child_process");
 const Agent = require("./agent");
@@ -34,29 +33,15 @@ function emoji(key) {
   return config.ui?.emoji?.[key] || "";
 }
 
-const CLINN_DIR = path.join(os.homedir(), ".clinn");
-const CLINN_CONFIG = path.join(CLINN_DIR, "config.json");
-const PKG_CONFIG = path.join(__dirname, "..", "config.json");
-
-function ensureClinnDir() {
-  if (!fs.existsSync(CLINN_DIR)) fs.mkdirSync(CLINN_DIR, { recursive: true });
-}
-
 function loadConfig() {
-  ensureClinnDir();
-  if (fs.existsSync(CLINN_CONFIG)) {
-    const raw = fs.readFileSync(CLINN_CONFIG, "utf-8");
-    config = JSON.parse(raw);
-  } else {
-    const raw = fs.readFileSync(PKG_CONFIG, "utf-8");
-    config = JSON.parse(raw);
-    fs.writeFileSync(CLINN_CONFIG, JSON.stringify(config, null, 2), "utf-8");
-  }
+  const configPath = path.join(__dirname, "..", "config.json");
+  const raw = fs.readFileSync(configPath, "utf-8");
+  config = JSON.parse(raw);
 }
 
 function saveConfig() {
-  ensureClinnDir();
-  fs.writeFileSync(CLINN_CONFIG, JSON.stringify(config, null, 2), "utf-8");
+  const configPath = path.join(__dirname, "..", "config.json");
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
 }
 
 function maxWidth() {
@@ -368,7 +353,7 @@ function showHelp() {
     ["/api", "查看/配置 API 设置"],
     ["/api key <KEY>", "设置 API Key"],
     ["/api url <URL>", "设置 API 地址"],
-    ["/api model <MODEL>", "设置模型名称"],
+    ["/api model <MODEL>", "设置模型名称"], ["/version", "显示版本号"],
   ];
   for (const [cmd, desc] of cmds) {
     console.log(`  ${C.yellow + cmd.padEnd(22) + C.reset} ${desc}`);
@@ -524,6 +509,10 @@ async function handleSlashCommand(input) {
         console.log(div());
         console.log(`  设置: /api key <KEY>  |  /api url <URL>  |  /api model <MODEL>`);
       }
+      break;
+    }
+    case "version": {
+      console.log(`${C.bold + C.cyan}${config.agent.name}${C.reset} v${config.agent.version}`);
       break;
     }
     case "tool_search": {
@@ -934,9 +923,22 @@ async function handleInput(line) {
 }
 
 async function main() {
+  if (process.argv.includes("--version") || process.argv.includes("-v")) {
+    loadConfig();
+    console.log(config.agent.version);
+    process.exit(0);
+  }
+
   loadConfig();
   showLogo();
   buildAgent();
+
+  if (!config.llm.apiKey || config.llm.apiKey.startsWith("YOUR_")) {
+    console.log(`  ${C.yellow}⚠ 未配置 API Key${C.reset}`);
+    console.log(`  设置: ${C.cyan}/api key <你的DeepSeek Key>${C.reset}`);
+    console.log(`  获取: ${C.dim}https://platform.deepseek.com/${C.reset}`);
+    console.log(div("="));
+  }
 
   readline.emitKeypressEvents(process.stdin);
   if (process.stdin.isTTY) process.stdin.setRawMode(true);

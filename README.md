@@ -149,8 +149,9 @@ Clinn/
 ├── install.sh          # macOS/Linux 安装脚本
 ├── install.bat         # Windows 安装脚本
 ├── clinn.bat           # Windows 快捷启动
-└── package.json
-
+├── package.json
+└── public/             # 发布版本
+    └── clinn-v0.7.1/
 ```
 
 ---
@@ -184,7 +185,17 @@ Clinn/
 
 ## 更新日志 (Changelog)
 
-### v0.7.1 — CLI 增强
+### v0.7.9 — 版本查询
+
+- **`--version` / `-v`**：终端直接 `clinn --version` 查看版本
+- **`/version`**：对话内 `/version` 查看版本
+
+### v0.7.8 — Windows 兼容 & 权限修复
+
+- **bin 入口改为 `.js`**：`#!/usr/bin/env node` + `.js` 后缀，npm 自动生成跨平台 shim，解决 Windows 上 `不是内部或外部命令` 问题
+- **修复双重权限弹窗**：危险工具只弹一次 Y/N 确认
+
+### v0.7.1 — CLI 增强 & npm 发布
 
 - **`/api` 命令**：直接在终端配置 API Key、API 地址、模型名称，无需编辑文件
   - `/api` — 查看当前 API 设置（Key 脱敏显示）

@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Clinn v0.5.0 — Global Install (Linux / macOS / WSL)
-# Usage: bash install.sh
 
+VER="0.7.11"
 INSTALL_LIB="/usr/local/lib/clinn"
 INSTALL_BIN="/usr/local/bin/clinn"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-RED='\033[0;31m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'; NC='\033[0m'
+RED='\033[0;31m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'; YELLOW='\033[0;33m'; NC='\033[0m'
 
 command -v node &>/dev/null || { echo -e "${RED}Node.js not found. Install Node.js >= 18: https://nodejs.org${NC}"; exit 1; }
 
@@ -17,26 +16,45 @@ if [ ! -w "/usr/local/lib" ] || [ ! -w "/usr/local/bin" ]; then
   NEED_SUDO="sudo"
 fi
 
-echo -e "${CYAN}Clinn v0.5.0 Global Install${NC}"
+echo ""
+echo -e "  ${CYAN}============================================${NC}"
+echo -e "  ${CYAN}  Clinn v${VER} — 强力安装 (Unix)${NC}"
+echo -e "  ${CYAN}============================================${NC}"
+echo ""
 
-# Extract old API key before wiping
 OLD_KEY=""
 if [ -f "$INSTALL_LIB/config.json" ]; then
   OLD_KEY=$(node -e "try{process.stdout.write(require('$INSTALL_LIB/config.json').llm?.apiKey||'')}catch(e){}" 2>/dev/null)
 fi
 
-# Copy files
-$NEED_SUDO mkdir -p "$INSTALL_LIB"
-$NEED_SUDO rm -rf "$INSTALL_LIB/Src" "$INSTALL_LIB/Tools" "$INSTALL_LIB/Mem" "$INSTALL_LIB/Logos"
-$NEED_SUDO cp -r "$SCRIPT_DIR/Src" "$INSTALL_LIB/"
-$NEED_SUDO cp -r "$SCRIPT_DIR/Tools" "$INSTALL_LIB/"
-$NEED_SUDO cp -r "$SCRIPT_DIR/Mem" "$INSTALL_LIB/"
-$NEED_SUDO cp -r "$SCRIPT_DIR/Logos" "$INSTALL_LIB/"
-$NEED_SUDO mkdir -p "$INSTALL_LIB/Tools/custom"
-$NEED_SUDO cp "$SCRIPT_DIR/config.json" "$INSTALL_LIB/config.json"
+echo -e "  ${YELLOW}正在清除旧安装...${NC}"
 
-# Merge old API key into new config
-if [ -n "$OLD_KEY" ] && [ "$OLD_KEY" != "YOUR_API_KEY" ]; then
+$NEED_SUDO rm -rf "$INSTALL_LIB" 2>/dev/null || true
+$NEED_SUDO rm -f "$INSTALL_BIN" 2>/dev/null || true
+$NEED_SUDO rm -f "/usr/bin/clinn" 2>/dev/null || true
+$NEED_SUDO rm -f "/usr/local/sbin/clinn" 2>/dev/null || true
+
+echo -e "  ${YELLOW}正在清理旧 PATH 条目...${NC}"
+for RC in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.bash_profile" "$HOME/.profile"; do
+  if [ -f "$RC" ]; then
+    sed -i.bak '/# Clinn PATH/d' "$RC" 2>/dev/null || true
+    sed -i.bak '/clinn/d' "$RC" 2>/dev/null || true
+    rm -f "${RC}.bak" 2>/dev/null || true
+  fi
+done
+
+echo -e "  ${CYAN}正在复制文件到 ${INSTALL_LIB}${NC}"
+$NEED_SUDO mkdir -p "$INSTALL_LIB"
+for D in Src Tools Mem Logos bin; do
+  if [ -d "$SCRIPT_DIR/$D" ]; then
+    $NEED_SUDO cp -r "$SCRIPT_DIR/$D" "$INSTALL_LIB/"
+  fi
+done
+$NEED_SUDO cp "$SCRIPT_DIR/config.json" "$INSTALL_LIB/config.json"
+$NEED_SUDO mkdir -p "$INSTALL_LIB/Tools/custom"
+
+if [ -n "$OLD_KEY" ] && [ "$OLD_KEY" != "YOUR_API_KEY" ] && [ "$OLD_KEY" != "YOUR_DEEPSEEK_API_KEY_HERE" ]; then
+  echo -e "  ${YELLOW}正在恢复旧 API Key...${NC}"
   $NEED_SUDO node -e "
     const fs=require('fs');
     const cfg=JSON.parse(fs.readFileSync('$INSTALL_LIB/config.json','utf-8'));
@@ -45,14 +63,18 @@ if [ -n "$OLD_KEY" ] && [ "$OLD_KEY" != "YOUR_API_KEY" ]; then
   "
 fi
 
-# Launcher
-$NEED_SUDO bash -c "cat > $INSTALL_BIN" << 'EOF'
+$NEED_SUDO bash -c "cat > $INSTALL_BIN" << 'LAUNCHER'
 #!/usr/bin/env bash
 exec node /usr/local/lib/clinn/Src/index.js "$@"
-EOF
+LAUNCHER
 $NEED_SUDO chmod +x "$INSTALL_BIN"
 
-echo -e "${GREEN}Done${NC}"
-echo -e "  Run:       ${CYAN}clinn${NC}"
-echo -e "  Config:    ${CYAN}${INSTALL_LIB}/config.json${NC}"
-echo -e "  Uninstall: ${CYAN}sudo rm -rf ${INSTALL_LIB} ${INSTALL_BIN}${NC}"
+echo ""
+echo -e "  ${GREEN}============================================${NC}"
+echo -e "  ${GREEN}  安装完成! 输入 clinn 即可启动${NC}"
+echo -e "  ${GREEN}============================================${NC}"
+echo ""
+echo -e "  运行:       ${CYAN}clinn${NC}"
+echo -e "  配置:       ${CYAN}${INSTALL_LIB}/config.json${NC}"
+echo -e "  卸载:       ${CYAN}sudo rm -rf ${INSTALL_LIB} ${INSTALL_BIN}${NC}"
+echo ""

@@ -88,6 +88,14 @@ class LLMClient {
         let data = "";
         res.on("data", (chunk) => (data += chunk));
         res.on("end", () => {
+          if (res.statusCode === 401) {
+            reject(new Error("API Key 无效或未设置 — 请用 /api key <你的Key> 设置"));
+            return;
+          }
+          if (res.statusCode === 403) {
+            reject(new Error("API Key 无权限 (403 Forbidden)"));
+            return;
+          }
           try {
             const json = JSON.parse(data);
             if (json.error) {
@@ -123,6 +131,27 @@ class LLMClient {
 
     return new Promise((resolve, reject) => {
       const req = https.request(options, (res) => {
+        if (res.statusCode === 401) {
+          reject(new Error("API Key 无效或未设置 — 请用 /api key <你的Key> 设置"));
+          return;
+        }
+        if (res.statusCode === 403) {
+          reject(new Error("API Key 无权限 (403 Forbidden)"));
+          return;
+        }
+        if (res.statusCode >= 400) {
+          let body = "";
+          res.on("data", (c) => (body += c));
+          res.on("end", () => {
+            try {
+              const j = JSON.parse(body);
+              reject(new Error(j.error?.message || `HTTP ${res.statusCode}`));
+            } catch (_) {
+              reject(new Error(`HTTP ${res.statusCode}: ${body.slice(0, 200)}`));
+            }
+          });
+          return;
+        }
         let buffer = "";
         const toolCallsMap = {};
         let content = "";

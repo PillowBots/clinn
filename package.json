@@ -1,10 +1,10 @@
 {
   "name": "@ghenya/clinn",
-  "version": "0.7.7",
+  "version": "0.7.15",
   "description": "终端原生 AI 编程助手 — DeepSeek 驱动，50+ 工具，对话记忆，虚拟浏览器",
   "main": "Src/index.js",
   "bin": {
-    "clinn": "bin/clinn.sh"
+    "clinn": "bin/clinn.js"
   },
   "files": [
     "Src/",
@@ -13,9 +13,13 @@
     "Logos/",
     "bin/",
     "config.json",
-    "README.md"
+    "README.md",
+    "install.js",
+    "install.sh",
+    "install.bat"
   ],
   "scripts": {
+    "postinstall": "node install.js",
     "start": "node Src/index.js",
     "lint": "node --check Src/index.js && node --check Src/agent.js && node --check Src/llm.js && node --check Tools/index.js && node --check Tools/extended_tools.js && node --check Tools/search_tools.js && node --check Tools/browser.js && node --check Mem/index.js && node --check Mem/history.js"
   },
