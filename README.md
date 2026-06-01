@@ -237,4 +237,4 @@ Clinn/
 
 ## 许可
 
-MIT License
+Apache License
