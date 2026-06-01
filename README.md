@@ -9,14 +9,26 @@ Clinn 是一个运行在终端里的 AI Agent，直接和你的文件系统、Sh
 ██      ██      ██ ████   ██ ████   ██
 ██      ██      ██ ██ ██  ██ ██ ██  ██
 ██      ██      ██ ██  ██ ██ ██  ██ ██
-██████  ███████ ██ ██   ████ ██   █0.7
+██████  ███████ ██ ██   ████ ██   █ 0.7
 ```
 
 ---
 
 ## 安装
 
-### macOS / Linux / WSL
+### npm（推荐）
+
+```bash
+npm install -g @ghenya/clinn
+```
+
+安装后在终端输入 `clinn` 即可启动。首次运行会自动在 `~/.clinn/` 创建配置文件。
+
+配置路径：`~/.clinn/config.json`  ·  历史记录：`~/.clinn/mem/`  ·  自定义工具：`~/.clinn/Tools/custom/`
+
+或终端内直接 `/api key <KEY>` 设置 API Key，无需编辑文件。
+
+### 手动安装 (macOS / Linux / WSL)
 
 ```bash
 git clone https://github.com/PillowBots/clinn.git
@@ -149,7 +161,7 @@ Clinn/
 ├── clinn.bat           # Windows 快捷启动
 ├── package.json
 └── public/             # 发布版本
-    └── clinn-v0.7.0/
+    └── clinn-v0.7.1/
 ```
 
 ---
@@ -182,6 +194,12 @@ Clinn/
 ---
 
 ## 更新日志 (Changelog)
+
+### v0.7.1 — CLI 增强 & npm 发布
+
+- **`/api` 命令**：直接在终端配置 API Key、API 地址、模型名称
+- **npm 发布**：`npm install -g @ghenya/clinn` 全球安装
+- v0.7.2-0.7.5：Windows 兼容性修复，bin 入口 `.bat`/`.sh` 双平台适配
 
 ### v0.7.0 — 交互重构 & 稳定性
 
