@@ -237,4 +237,4 @@ Clinn/
 
 ## 许可
 
-Apache License
+Apache2.0 License
