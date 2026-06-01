@@ -236,5 +236,4 @@ Clinn/
 ---
 
 ## 许可
-
-MIT License
+APACHE 2.0
