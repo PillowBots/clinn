@@ -1,0 +1,26 @@
+{
+  "name": "clinn",
+  "version": "0.7.0",
+  "description": "Clinn — 智能编程助手，DeepSeek 驱动，终端原生 AI Agent",
+  "main": "Src/index.js",
+  "bin": {
+    "clinn": "Src/index.js"
+  },
+  "scripts": {
+    "start": "node Src/index.js",
+    "lint": "node --check Src/index.js && node --check Src/agent.js && node --check Src/llm.js && node --check Tools/index.js && node --check Tools/extended_tools.js && node --check Tools/search_tools.js && node --check Tools/browser.js && node --check Mem/index.js && node --check Mem/history.js"
+  },
+  "keywords": ["ai", "agent", "cli", "deepseek", "terminal"],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "dependencies": {
+    "puppeteer-core": "^25.1.0"
+  },
+  "optionalDependencies": {
+    "puppeteer-core": "^25.1.0"
+  }
+}
