@@ -22,7 +22,7 @@ const CLINN_CONFIG = path.join(CLINN_DIR, "config.json");
 const PKG_CONFIG = path.join(__dirname, "..", "config.json");
 const LOGO_PATH = path.join(__dirname, "..", "Logos", "StartLogo.txt");
 
-const VER = "0.9.1";
+const VER = "0.9.2";
 
 function ensureDir() { if (!fs.existsSync(CLINN_DIR)) fs.mkdirSync(CLINN_DIR, { recursive: true }); }
 function loadConfig() {
@@ -801,7 +801,7 @@ function App() {
               {LOGO_LINES.map((line, i) => (
                 <Text key={i} color="cyanBright">{line}</Text>
               ))}
-              <Text color="green">{CONFIG.llm.model} · {CONFIG.llm.contextWindow || 131072} tokens</Text>
+              <Text color="green">{CONFIG.llm.model} · {CONFIG.llm.contextWindow || 1048576} tokens</Text>
             </Box>
             {/* 右边欢迎框 */}
             <Box borderStyle="round" borderColor="cyan" flexDirection="column" paddingX={2} paddingY={1}>

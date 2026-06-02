@@ -45,11 +45,11 @@ function estimateTokens(text) {
  */
 function getContextWindow(model) {
   const known = {
-    "deepseek-chat": 65536,
-    "deepseek-reasoner": 65536,
-    "deepseek-v3": 65536,
-    "deepseek-v4-pro": 131072,
-    "deepseek-r1": 65536,
+    "deepseek-chat": 1048576,
+    "deepseek-reasoner": 1048576,
+    "deepseek-v3": 1048576,
+    "deepseek-v4-pro": 1048576,
+    "deepseek-r1": 1048576,
     "gpt-4": 8192,
     "gpt-4-turbo": 128000,
     "gpt-4o": 128000,
@@ -59,7 +59,7 @@ function getContextWindow(model) {
     "claude-3-sonnet": 200000,
     "claude-3-haiku": 200000,
   };
-  if (!model) return 65536;
+  if (!model) return 1048576;
   const key = model.toLowerCase();
   for (const [k, v] of Object.entries(known)) {
     if (key.includes(k)) return v;
