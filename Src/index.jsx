@@ -22,7 +22,7 @@ const CLINN_CONFIG = path.join(CLINN_DIR, "config.json");
 const PKG_CONFIG = path.join(__dirname, "..", "config.json");
 const LOGO_PATH = path.join(__dirname, "..", "Logos", "StartLogo.txt");
 
-const VER = "0.9.2";
+const VER = "0.9.3";
 
 function ensureDir() { if (!fs.existsSync(CLINN_DIR)) fs.mkdirSync(CLINN_DIR, { recursive: true }); }
 function loadConfig() {
@@ -333,6 +333,25 @@ function App() {
   const [queue, setQueue] = useState([]);
   const abortRef = useRef(null);
 
+  // 桥接到模块级 SIGINT handler
+  _setInputFn = setInput;
+  _addMsgFn = addMsg;
+  useEffect(() => {
+    const sigintHandler = () => {
+      if (_abortCtrl) { _abortCtrl.abort(); return; }
+      if (_inputVal.length > 0) { _setInputFn?.(""); return; }
+    };
+    let count = 0;
+    const wrapped = () => {
+      count++;
+      if (count >= 3) process.exit(0);
+      setTimeout(() => { count = 0; }, 1000);
+      sigintHandler();
+    };
+    process.on("SIGINT", wrapped);
+    return () => process.removeListener("SIGINT", wrapped);
+  }, []);
+
   useEffect(() => {
     const timer = setInterval(() => setMascotFace(kao.mascotForFrame()), 1000);
     return () => clearInterval(timer);
@@ -366,6 +385,7 @@ function App() {
 
     const controller = new AbortController();
     abortRef.current = controller;
+    _abortCtrl = controller;
 
     let buf = "";
     const toolMap = new Map();
@@ -413,6 +433,7 @@ function App() {
     setThinking(false);
     setToolsCollapsed(true);
     abortRef.current = null;
+    _abortCtrl = null;
 
     // 处理队列中的下一条
     setQueue(prev => {
@@ -774,16 +795,6 @@ function App() {
   slashRef.current = { filtered: slashFiltered, clamped: slashClamped };
 
   useInput((inputVal, key) => {
-    if (key.ctrl && inputVal === "c") {
-      if (abortRef.current) {
-        abortRef.current.abort();
-        return;
-      }
-      if (input.length > 0) {
-        setInput("");
-      }
-      return;
-    }
     if (key.escape) process.exit(0);
     if (!slashInput || !slashFiltered.length) return;
     if (key.upArrow) setSlashIdx((slashClamped - 1 + slashFiltered.length) % slashFiltered.length);
@@ -904,6 +915,7 @@ function App() {
               value={input.length > 500 ? "…" + input.slice(-300) : input}
               onChange={v => {
                 setSlashIdx(0);
+                _inputVal = v;
                 if (v.startsWith("…")) {
                   setInput(input.slice(0, Math.max(0, input.length - 300)) + v.slice(1));
                 } else {
@@ -924,13 +936,8 @@ function App() {
 
 const { waitUntilExit } = render(<App />);
 
-// 拦截 SIGINT：Ctrl+C 由 Ink useInput 处理，不直接退出
-let sigintCount = 0;
-process.on("SIGINT", () => {
-  sigintCount++;
-  if (sigintCount >= 3) {
-    process.exit(0);
-  }
-  // 单次/双次 Ctrl+C 不退出，交给 Ink 的 useInput 处理
-  setTimeout(() => { sigintCount = 0; }, 1000);
-});
+// 模块级 ref：供 SIGINT handler 使用（Ink useInput 收不到 Ctrl+C）
+let _abortCtrl = null;
+let _inputVal = "";
+let _setInputFn = null;
+let _addMsgFn = null;
