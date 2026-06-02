@@ -1,6 +1,6 @@
 {
   "name": "@ghenya/clinn",
-  "version": "0.10.0",
+  "version": "1.0.0",
   "description": "终端原生 AI 编程助手 — DeepSeek 驱动，50+ 工具，对话记忆，虚拟浏览器，Ink 全屏界面",
   "main": "Src/index.jsx",
   "bin": {
