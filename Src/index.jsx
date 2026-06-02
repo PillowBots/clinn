@@ -22,7 +22,7 @@ const CLINN_CONFIG = path.join(CLINN_DIR, "config.json");
 const PKG_CONFIG = path.join(__dirname, "..", "config.json");
 const LOGO_PATH = path.join(__dirname, "..", "Logos", "StartLogo.txt");
 
-const VER = "1.0.3";
+const VER = "1.0.3-rc1";
 
 function ensureDir() { if (!fs.existsSync(CLINN_DIR)) fs.mkdirSync(CLINN_DIR, { recursive: true }); }
 function loadConfig() {
@@ -854,6 +854,8 @@ function App() {
         )}
       </Box>
 
+      </Box>
+      )}
       {slashInput && slashFiltered.length > 0 && (
         <Box flexDirection="column" paddingLeft={2} marginBottom={0}>
           {slashFiltered.map((c, i) => {
@@ -870,9 +872,6 @@ function App() {
             <Text color="gray">  \u2191\u2193 切换 \u00b7 回车 选取</Text>
           </Box>
         </Box>
-      )}
-
-      </Box>
       )}
       <Box flexDirection="column" flexShrink={0}>
         <Text color="gray" dimColor>{"─".repeat(cols - 2)}</Text>

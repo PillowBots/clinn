@@ -1,7 +1,7 @@
 {
   "agent": {
     "name": "Clinn",
-    "version": "1.0.3",
+    "version": "1.0.3-rc1",
     "description": "控制台智能体助手"
   },
   "llm": {
