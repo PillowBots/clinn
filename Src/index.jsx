@@ -22,7 +22,7 @@ const CLINN_CONFIG = path.join(CLINN_DIR, "config.json");
 const PKG_CONFIG = path.join(__dirname, "..", "config.json");
 const LOGO_PATH = path.join(__dirname, "..", "Logos", "StartLogo.txt");
 
-const VER = "0.10.0";
+const VER = "1.0.1";
 
 function ensureDir() { if (!fs.existsSync(CLINN_DIR)) fs.mkdirSync(CLINN_DIR, { recursive: true }); }
 function loadConfig() {

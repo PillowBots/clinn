@@ -1,13 +1,20 @@
 #!/usr/bin/env node
-import { register } from "node:module";
-import { pathToFileURL } from "node:url";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const tsxPath = path.join(__dirname, "..", "node_modules", "tsx", "dist", "esm", "index.mjs");
 
-// 注册 tsx loader 处理 JSX
-register("tsx/esm", pathToFileURL("./"));
+// Node 24+: register() is broken, re-exec with --import
+if (!process.execArgv.some(a => a.includes("tsx"))) {
+  const result = spawnSync(
+    process.execPath,
+    ["--import", tsxPath, fileURLToPath(import.meta.url), ...process.argv.slice(2)],
+    { stdio: "inherit" }
+  );
+  process.exit(result.status ?? 1);
+}
 
-// 直接 import 主程序（同进程，Ctrl+C 正常）
-await import(pathToFileURL(path.join(__dirname, "..", "Src", "index.jsx")).href);
+// Running under tsx loader
+await import(path.join(__dirname, "..", "Src", "index.jsx"));
