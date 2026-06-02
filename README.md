@@ -149,4 +149,4 @@ AI 在对话中生成工具代码，通过 `save_tool` 持久化到 `~/.clinn/To
 
 ---
 
-MIT License
+Apache2.0 License
