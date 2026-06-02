@@ -35,7 +35,7 @@ let _browserPromise = null;
 let _browser = null;
 
 async function _ensureBrowser() {
-  if (_browser && _browser.isConnected()) return _browser;
+  if (_browser && _browser.connected) return _browser;
   const pp = _getPuppeteer();
   if (!pp) throw new Error("puppeteer-core 未安装, 请运行 npm install puppeteer-core");
   const chromePath = _getChromePath();

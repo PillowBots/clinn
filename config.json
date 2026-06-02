@@ -1,7 +1,7 @@
 {
   "agent": {
     "name": "Clinn",
-    "version": "0.7.15",
+    "version": "0.9.1",
     "description": "控制台智能体助手"
   },
   "llm": {
@@ -10,6 +10,7 @@
     "baseURL": "https://api.deepseek.com/v1",
     "model": "deepseek-v4-pro",
     "maxTokens": 8000,
+    "contextWindow": 131072,
     "temperature": 0.7,
     "topP": 0.9
   },

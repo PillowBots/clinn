@@ -2,7 +2,12 @@ const os = require("os");
 const LLMClient = require("./llm.cjs");
 const Tools = require("../Tools");
 const { ConversationMemory } = require("../Mem");
-const { saveTurn, searchHistory, getFileList, loadFileTurns } = require("../Mem/history");
+const {
+  saveTurn, searchHistory, getFileList, loadFileTurns,
+  startSession, endSession, listSessions, getSession,
+  loadSessionTurns, searchSessions, globalSearch,
+  migrateLegacySessions,
+} = require("../Mem/history");
 
 const MAX_ITERATIONS = 500;
 const MAX_TOOL_RESULT_CHARS = 3000;
@@ -22,14 +27,44 @@ function buildSystemInfo() {
 }
 
 function estimateTokens(text) {
-  let chars = 0;
+  if (!text) return 0;
   let cjk = 0;
+  let ascii = 0;
   for (const ch of text) {
     const code = ch.codePointAt(0);
     if (code > 127) cjk++;
-    chars++;
+    else ascii++;
   }
-  return Math.ceil(cjk * 1.5 + (chars - cjk) * 0.35);
+  // DeepSeek tokenizer: 中文约 0.6-0.8 token/字, 英文约 0.25-0.3 token/字符
+  // 保守估计: 中文 0.8, 英文 0.3
+  return Math.ceil(cjk * 0.8 + ascii * 0.3);
+}
+
+/**
+ * 根据模型名估算上下文窗口大小
+ */
+function getContextWindow(model) {
+  const known = {
+    "deepseek-chat": 65536,
+    "deepseek-reasoner": 65536,
+    "deepseek-v3": 65536,
+    "deepseek-v4-pro": 131072,
+    "deepseek-r1": 65536,
+    "gpt-4": 8192,
+    "gpt-4-turbo": 128000,
+    "gpt-4o": 128000,
+    "gpt-4o-mini": 128000,
+    "gpt-3.5-turbo": 16384,
+    "claude-3-opus": 200000,
+    "claude-3-sonnet": 200000,
+    "claude-3-haiku": 200000,
+  };
+  if (!model) return 65536;
+  const key = model.toLowerCase();
+  for (const [k, v] of Object.entries(known)) {
+    if (key.includes(k)) return v;
+  }
+  return 65536;
 }
 
 function estimateMessagesTokens(messages) {
@@ -50,8 +85,13 @@ class Agent {
     this.systemInfo = buildSystemInfo();
     this.systemPrompt = `${config.systemPrompt}\n\n[系统环境]\n${this.systemInfo}`;
     this.autoCompressThreshold = config.memory?.autoCompressThreshold || 5000;
-    this.maxContextTokens = (config.llm?.maxTokens || 65536) * 0.75;
+    // 使用模型的实际上下文窗口（从模型名推断），而不是 maxTokens（那是输出限制）
+    this.maxContextTokens = (config.llm?.contextWindow || getContextWindow(config.llm?.model)) * 0.8;
     this._lastToolCalls = [];
+
+    // session management
+    migrateLegacySessions();
+    this.sessionId = startSession();
 
     Tools.setTrusted(config.tools?.trustedTools || []);
     Tools.setPermissionCallback(async (name, args) => {
@@ -67,10 +107,12 @@ class Agent {
     const self = this;
     const memTools = [
       "search_memory", "save_memory", "list_memory", "delete_memory",
+      "mem_rom", "mem_ram",
       "compress_context", "agent_self_invoke", "set_timer",
       "save_tool", "delete_tool_file", "list_saved_tools",
       "forget_conversation", "restart_session",
       "search_history", "list_history_files",
+      "list_sessions", "view_session", "search_sessions",
     ];
     for (const name of memTools) {
       const tool = Tools.getTool(name);
@@ -83,10 +125,16 @@ class Agent {
     switch (name) {
       case "search_memory":
         return this._fmtEntries(this.memory.searchEntries(args.query, args.limit || 5));
-      case "save_memory": {
+      case "save_memory":
+      case "mem_rom": {
         const tags = args.tags ? args.tags.split(",").map((t) => t.trim()) : [];
-        const entry = this.memory.addEntry(args.content, tags);
-        return entry ? `[OK] 已保存 #${entry.id}: ${entry.text}` : "[失败] 内容为空";
+        const entry = this.memory.addRomEntry(args.content, tags);
+        return entry ? `[ROM] 已保存 #${entry.id}: ${entry.text}` : "[失败] 内容为空";
+      }
+      case "mem_ram": {
+        const tags = args.tags ? args.tags.split(",").map((t) => t.trim()) : [];
+        const entry = this.memory.addRamEntry(args.content, tags);
+        return entry ? `[RAM] 已保存 #${entry.id}: ${entry.text}` : "[失败] 内容为空";
       }
       case "list_memory": {
         const all = this.memory.getAllEntries().slice(-(args.limit || 20));
@@ -100,7 +148,7 @@ class Agent {
         const compressed = this.memory.compressHistory();
         if (!compressed) return "[跳过] 对话太短";
         const summary = await this._summarize(compressed);
-        this.memory.addEntry(summary, ["auto-summary"]);
+        this.memory.addRamEntry(summary, ["auto-summary"]);
         this.memory.clear();
         return `[OK] 上下文已压缩, 摘要存入记忆: ${summary}`;
       }
@@ -143,16 +191,18 @@ class Agent {
           if (compressed) summary = await this._summarize(compressed);
         }
         this.memory.clear();
-        if (summary) { this.memory.addEntry(summary, ["auto-summary"]); }
+        if (summary) { this.memory.addRamEntry(summary, ["auto-summary"]); }
         return summary
           ? `[OK] 对话已遗忘, 摘要已保存: ${summary}`
           : "[OK] 对话历史已清空, 像全新对话一样";
       }
       case "restart_session": {
+        endSession(this.sessionId);
         this.memory.clear();
-        this.memory.clearEntries();
+        this.memory.clearRamEntries();
         this.llm.resetUsage();
-        return "[OK] 会话已完全重启: 历史+记忆+token计数均已重置. 可以开始全新任务.";
+        this.sessionId = startSession();
+        return "[OK] 会话已完全重启: 历史+记忆+token计数均已重置, 新session已创建. 可以开始全新任务.";
       }
       case "search_history": {
         const q = args.query || "";
@@ -167,6 +217,47 @@ class Agent {
         const files = getFileList();
         if (files.length === 0) return "(暂无历史对话文件)";
         return files.map((f) => `${f.file} | ${f.turns}轮 | ${f.size}KB | ${f.created.slice(0, 10)}`).join("\n");
+      }
+      case "list_sessions": {
+        const sessions = listSessions(args.limit || 20);
+        if (sessions.length === 0) return "(暂无对话 session)";
+        const now = this.sessionId;
+        return sessions.map((s, i) => {
+          const marker = s.id === now ? " ◀ 当前" : "";
+          const status = s.status === "active" ? "●" : "○";
+          const date = s.started ? s.started.slice(0, 16) : "?";
+          return `${i + 1}. ${status} [${date}] ${s.title || "(无标题)"} | ${s.turnCount}轮${marker}`;
+        }).join("\n");
+      }
+      case "view_session": {
+        const sid = args.session_id || "";
+        if (!sid) return "[错误] 请提供 session_id (用 list_sessions 获取)";
+        const session = getSession(sid);
+        if (!session) return `[未找到] session ${sid}`;
+        const turns = loadSessionTurns(sid, args.limit || 50);
+        if (turns.length === 0) return `[空] session ${sid} 中没有对话轮次`;
+        const header = [
+          `=== Session: ${session.title || "(无标题)"} ===`,
+          `ID: ${session.id}  |  开始: ${session.started?.slice(0, 16) || "?"}  |  共 ${session.turnCount} 轮`,
+          ``,
+        ];
+        const body = turns.map((t, i) => {
+          return `[${i + 1}] ${t.time?.slice(0, 16) || "?"}\n` +
+            `  > 用户: ${t.user ? t.user.slice(0, 200) : ""}\n` +
+            `  < 回复: ${t.assistant ? t.assistant.slice(0, 300) : ""}`;
+        });
+        return header.join("\n") + "\n" + body.join("\n\n");
+      }
+      case "search_sessions": {
+        const q = args.query || "";
+        if (!q.trim()) return "[错误] 请提供搜索关键词";
+        const results = globalSearch(q, args.limit || 10);
+        if (results.length === 0) return `[无匹配] 在所有历史 session 中未找到 "${q}"`;
+        return results.map((r, i) => {
+          const date = r.sessionStarted ? r.sessionStarted.slice(0, 16) : "?";
+          const previews = r.topMatches.map((m) => `    · ${m.user.slice(0, 80)}`).join("\n");
+          return `${i + 1}. [${date}] ${r.sessionTitle} | 匹配 ${r.matchCount} 处 | 得分 ${r.totalScore}\n${previews}`;
+        }).join("\n\n");
       }
       default:
         return `[未知内部工具] ${name}`;
@@ -188,7 +279,10 @@ class Agent {
 
   _fmtEntries(entries) {
     if (!entries || entries.length === 0) return "(无记忆条目)";
-    return entries.map((e) => `#${e.id} [${e.tags?.join(",") || "-"}] ${e.text}`).join("\n");
+    return entries.map((e) => {
+      const tag = (e._type === "ram") ? "[RAM]" : "[ROM]";
+      return `${tag} #${e.id} [${e.tags?.join(",") || "-"}] ${e.text}`;
+    }).join("\n");
   }
 
   refreshTools() {
@@ -216,6 +310,8 @@ class Agent {
     let allMsgs = [];
     let warned90 = false;
     let warned95 = false;
+    const firstIteration = this._firstRun !== false;
+    this._firstRun = false;
 
     const activeTools = Tools.filterToolDeclarations(userMessage);
 
@@ -268,6 +364,17 @@ class Agent {
 
         messages.push(stepAssistant);
         messages.push(...toolMsgs);
+
+        // 智能压缩: 超过 8 轮工具调用后, 把旧结果截短
+        if (i > 8) {
+          for (let mi = 1; mi < messages.length - 2; mi++) {
+            const m = messages[mi];
+            if (m.role === "tool" && m.content && m.content.length > 200) {
+              m.content = m.content.slice(0, 200) + "...(已截短)";
+            }
+          }
+        }
+
         continue;
       }
 
@@ -282,7 +389,7 @@ class Agent {
     this.memory.addAssistant(finalResponse);
 
     try {
-      saveTurn(userMessage, finalResponse, process.cwd(), allMsgs);
+      saveTurn(userMessage, finalResponse, process.cwd(), allMsgs, this.sessionId);
     } catch (_) {}
 
     if (opts._noAutoSave) return finalResponse;
@@ -297,7 +404,7 @@ class Agent {
           ];
           const res = await this.llm.chat(msgs);
           const habit = res.choices?.[0]?.message?.content?.trim().slice(0, 100);
-          if (habit) this.memory.addEntry(habit, ["habit"]);
+          if (habit) this.memory.addRamEntry(habit, ["habit"]);
         }
       } catch (_) {}
     });

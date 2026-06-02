@@ -6,6 +6,7 @@ const editTools = require("./edit_tools");
 const extendedTools = require("./extended_tools");
 const browserTools = require("./browser");
 const tokenizer = require("./tokenizer");
+const templateTools = require("./template_engine");
 
 let toolRegistry = {
   ...fileTools,
@@ -13,6 +14,7 @@ let toolRegistry = {
   ...editTools,
   ...extendedTools,
   ...browserTools,
+  ...templateTools,
 };
 
 let permissionCallback = null;
@@ -239,7 +241,7 @@ function filterToolDeclarations(prompt) {
     return toFunctionDeclarations();
   }
 
-  const alwaysInclude = ["search_memory", "save_memory", "list_memory", "delete_memory", "search_history", "list_history_files", "browse_page", "browse_page_text", "compress_context", "forget_conversation", "restart_session", "todo_write"];
+  const alwaysInclude = ["search_memory", "save_memory", "list_memory", "delete_memory", "mem_rom", "mem_ram", "search_history", "list_history_files", "list_sessions", "view_session", "search_sessions", "browse_page", "browse_page_text", "compress_context", "forget_conversation", "restart_session", "todo_write"];
   for (const name of alwaysInclude) {
     if (toolRegistry[name]) matched.add(name);
   }

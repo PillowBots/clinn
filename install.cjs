@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
 
-const VER = "0.8.0";
+const VER = "0.8.4";
 const G = "\x1b[0;32m", C = "\x1b[0;36m", Y = "\x1b[0;33m", R = "\x1b[0;31m", N = "\x1b[0m", D = "\x1b[2m";
 
 const IS_WIN = process.platform === "win32";

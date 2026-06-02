@@ -172,12 +172,32 @@ const searchMemoryTool = {
 
 const saveMemoryTool = {
   name: "save_memory",
-  description: "保存一条关键信息到记忆(每条不超过200字)",
+  description: "保存一条关键信息到 ROM(永久记忆, 重启不丢). 等价于 mem_rom",
   parameters: {
     content: { type: "string", required: true, description: "记忆内容" },
     tags: { type: "string", required: false, description: "标签,逗号分隔" },
   },
   execute: () => { return "save_memory must be injected"; },
+};
+
+const memRomTool = {
+  name: "mem_rom",
+  description: "保存一条 ROM 记忆(永久保存, 写入磁盘, 重启后仍存在). 用于身份、偏好、配置等跨会话信息",
+  parameters: {
+    content: { type: "string", required: true, description: "记忆内容, 不超过200字" },
+    tags: { type: "string", required: false, description: "标签,逗号分隔, 如 habit,config" },
+  },
+  execute: () => { return "mem_rom must be injected"; },
+};
+
+const memRamTool = {
+  name: "mem_ram",
+  description: "保存一条 RAM 记忆(仅本次窗口, 关闭即丢失). 用于临时上下文、当前任务状态等",
+  parameters: {
+    content: { type: "string", required: true, description: "记忆内容, 不超过200字" },
+    tags: { type: "string", required: false, description: "标签,逗号分隔" },
+  },
+  execute: () => { return "mem_ram must be injected"; },
 };
 
 const listMemoryTool = {
@@ -213,6 +233,35 @@ const listHistoryTool = {
   description: "列出 mem/ 文件夹中的历史对话文件列表",
   parameters: {},
   execute: () => { return "list_history_files must be injected"; },
+};
+
+const listSessionsTool = {
+  name: "list_sessions",
+  description: "列出所有对话 session（会话分组），每次 /new 或重启算一个新 session。可以看到过去的对话主题、时间、轮数。用这个来回答「之前聊过什么」类问题。",
+  parameters: {
+    limit: { type: "number", required: false, description: "返回数量, 默认20" },
+  },
+  execute: () => { return "list_sessions must be injected"; },
+};
+
+const viewSessionTool = {
+  name: "view_session",
+  description: "查看某个 session 的完整对话内容，包括用户消息和 AI 回复。用 list_sessions 获取 session_id 后再调用此工具。",
+  parameters: {
+    session_id: { type: "string", required: true, description: "Session ID (从 list_sessions 获取)" },
+    limit: { type: "number", required: false, description: "返回轮数上限, 默认50" },
+  },
+  execute: () => { return "view_session must be injected"; },
+};
+
+const searchSessionsTool = {
+  name: "search_sessions",
+  description: "在全部历史 session 中全文搜索。比 search_history 更好——会按 session 分组、显示匹配得分和上下文。用这个来回答「你记得关于 X 的哪次对话？」类问题。",
+  parameters: {
+    query: { type: "string", required: true, description: "搜索关键词，支持多词空格分隔" },
+    limit: { type: "number", required: false, description: "返回数量, 默认10" },
+  },
+  execute: () => { return "search_sessions must be injected"; },
 };
 
 const compressContextTool = {
@@ -268,10 +317,15 @@ module.exports = {
   set_timer: setTimerTool,
   search_memory: searchMemoryTool,
   save_memory: saveMemoryTool,
+  mem_rom: memRomTool,
+  mem_ram: memRamTool,
   list_memory: listMemoryTool,
   delete_memory: deleteMemoryTool,
   search_history: searchHistoryTool,
   list_history_files: listHistoryTool,
+  list_sessions: listSessionsTool,
+  view_session: viewSessionTool,
+  search_sessions: searchSessionsTool,
   compress_context: compressContextTool,
   agent_self_invoke: agentSelfInvokeTool,
   save_tool: saveToolTool,

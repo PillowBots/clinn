@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
+const { syntaxCheck } = require("./syntax_check");
 
 const readFileTool = {
   name: "read_file",
@@ -26,7 +27,12 @@ const writeFileTool = {
     const dir = path.dirname(filePath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(filePath, content, "utf-8");
-    return `[OK] 已写入 ${filePath} (${content.length} 字符)`;
+    // 语法检查
+    const err = syntaxCheck(filePath);
+    if (err) {
+      return `[OK] 已写入 ${filePath} (${content.length} 字符)\n[⚠ 语法警告] ${err}`;
+    }
+    return `[OK] 已写入 ${filePath} (${content.length} 字符) | ✓ 语法通过`;
   },
 };
 

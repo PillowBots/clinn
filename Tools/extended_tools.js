@@ -10,6 +10,7 @@ const path = require("path");
 const { execSync, spawn } = require("child_process");
 const https = require("https");
 const http = require("http");
+const { syntaxCheck } = require("./syntax_check");
 
 const todoWriteTool = {
   name: "todo_write",
@@ -60,6 +61,62 @@ const searchReplaceTool = {
   },
 };
 
+/**
+ * 将 glob 模式转为正则表达式
+ * 支持: ** (任意深度目录), * (单层通配), ? (单字符), [abc] (字符类)
+ */
+function globToRegex(pattern) {
+  const parts = pattern.split("/");
+  let regex = "^";
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i];
+    if (p === "**") {
+      if (i === parts.length - 1) {
+        // ** 在末尾: 匹配剩余所有路径
+        regex += "(?:[^/]+/)*[^/]*";
+      } else {
+        // ** 在中间: 匹配零或多级中间目录(含尾部 /)
+        regex += "(?:[^/]+/)*";
+      }
+    } else {
+      // 普通段: * → [^/]*, ? → [^/], 正则特殊字符转义
+      let seg = "";
+      let j = 0;
+      while (j < p.length) {
+        const ch = p[j];
+        if (ch === "*") {
+          seg += "[^/]*";
+          j++;
+        } else if (ch === "?") {
+          seg += "[^/]";
+          j++;
+        } else if (ch === "[") {
+          const end = p.indexOf("]", j);
+          if (end !== -1) {
+            seg += p.slice(j, end + 1);
+            j = end + 1;
+          } else {
+            seg += "\\[";
+            j++;
+          }
+        } else {
+          // 转义正则特殊字符
+          if (".+^${}()|\\".includes(ch)) seg += "\\" + ch;
+          else seg += ch;
+          j++;
+        }
+      }
+      regex += seg;
+      // 非末尾段, 且当前段不是 ** (它自带尾部 /)
+      if (i < parts.length - 1 && p !== "**") {
+        regex += "/";
+      }
+    }
+  }
+  regex += "$";
+  return new RegExp(regex);
+}
+
 const globTool = {
   name: "glob",
   description: "文件模式匹配: 支持 **/*.js / src/**/*.ts 等glob模式, 按修改时间排序",
@@ -68,41 +125,158 @@ const globTool = {
     dirPath: { type: "string", required: false, description: "搜索根目录, 默认当前目录" },
   },
   execute: async ({ pattern, dirPath }) => {
-    const root = dirPath || process.cwd();
+    const root = path.resolve(dirPath || process.cwd());
     if (!fs.existsSync(root)) return `[不存在] ${root}`;
+
+    const regex = globToRegex(pattern);
+    const results = [];
+    const MAX_RESULTS = 200;
+    const IGNORE_DIRS = new Set(["node_modules", ".git", ".svn", "__pycache__", ".DS_Store"]);
+
+    function walk(dir, depth) {
+      if (depth > 20 || results.length >= MAX_RESULTS) return;
+      let entries;
+      try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+      } catch (_) {
+        return; // 无权限目录跳过
+      }
+      for (const entry of entries) {
+        if (results.length >= MAX_RESULTS) return;
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          if (IGNORE_DIRS.has(entry.name)) continue;
+          // 也尝试用目录路径匹配（某些 glob 只关心目录结构）
+          walk(fullPath, depth + 1);
+        } else if (entry.isFile()) {
+          const relPath = path.relative(root, fullPath);
+          // 统一用正斜杠
+          const normalized = relPath.split(path.sep).join("/");
+          if (regex.test(normalized)) {
+            try {
+              const stat = fs.statSync(fullPath);
+              results.push({ path: fullPath, mtime: stat.mtimeMs });
+            } catch (_) {
+              results.push({ path: fullPath, mtime: 0 });
+            }
+          }
+        }
+      }
+    }
+
     try {
-      const cmd = `Get-ChildItem -Path "${root}" -Filter "${pattern.split("/").pop()}" -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch 'node_modules|\\\\\.git\\\\' } | Select-Object -First 100 | ForEach-Object { $_.FullName }`;
-      const output = execSync(cmd, { cwd: root, encoding: "utf-8", timeout: 8000, maxBuffer: 1024 * 1024, shell: "powershell.exe" });
-      const files = output.trim().split("\r\n").filter(Boolean);
-      return files.length > 0 ? files.join("\n") : `[无匹配] ${pattern} 在 ${root}`;
+      walk(root, 1);
     } catch (e) {
+      return `[错误] glob 遍历失败: ${e.message}`;
+    }
+
+    if (results.length === 0) {
       return `[无匹配] ${pattern} 在 ${root}`;
     }
+
+    // 按修改时间降序排列
+    results.sort((a, b) => b.mtime - a.mtime);
+    return results.map((r) => r.path).join("\n");
   },
 };
 
 const grepTool = {
   name: "grep",
-  description: "正则搜索文件内容(ripgrep风格). 返回 文件路径:行号:内容",
+  description: "超快速内容搜索(优先使用ripgrep). 支持上下文行/files_only/count三种输出模式. 比系统grep快5-10x",
   parameters: {
-    pattern: { type: "string", required: true, description: "正则表达式" },
+    pattern: { type: "string", required: true, description: "正则表达式搜索模式" },
     dirPath: { type: "string", required: false, description: "搜索目录, 默认当前目录" },
-    glob: { type: "string", required: false, description: "文件过滤glob, 如 '*.js'" },
+    glob: { type: "string", required: false, description: "文件过滤, 如 '*.js' 或 '*.{ts,tsx}'" },
     headLimit: { type: "number", required: false, description: "结果上限, 默认50" },
     ignoreCase: { type: "boolean", required: false, description: "忽略大小写, 默认true" },
+    context: { type: "number", required: false, description: "上下文行数(前后各N行), 默认0" },
+    outputMode: { type: "string", required: false, description: "输出模式: content(默认)/files_only/count" },
   },
-  execute: async ({ pattern, dirPath, glob, headLimit, ignoreCase }) => {
-    const root = dirPath || process.cwd();
+  execute: async ({ pattern, dirPath, glob, headLimit, ignoreCase, context, outputMode }) => {
+    const root = path.resolve(dirPath || process.cwd());
     if (!fs.existsSync(root)) return `[不存在] ${root}`;
     const max = headLimit || 50;
     const ic = ignoreCase !== false;
+    const mode = outputMode || "content";
+
+    // 优先使用 ripgrep (更快, 支持 --json + 上下文)
+    const rgPath = (() => {
+      try { return execSync("which rg", { encoding: "utf-8", timeout: 2000 }).trim(); }
+      catch (_) { return null; }
+    })();
+
+    if (rgPath) {
+      const args = ["--json"];
+      if (ic) args.push("-i");
+      if (glob) args.push("-g", glob);
+      args.push("-m", String(max));
+      if (context && context > 0) args.push("-C", String(context));
+      args.push("--no-ignore-vcs");
+      args.push("-g", "!node_modules");
+      args.push("-g", "!.git");
+      args.push("-g", "!__pycache__");
+      args.push("-g", "!.DS_Store");
+
+      try {
+        const stdout = execSync(
+          `rg ${args.map(a => JSON.stringify(a)).join(" ")} ${JSON.stringify(pattern)} ${JSON.stringify(root)}`,
+          { encoding: "utf-8", timeout: 30000, maxBuffer: 4 * 1024 * 1024 }
+        );
+        if (!stdout.trim()) return `[无匹配] "${pattern}" 在 ${root}`;
+
+        const lines = stdout.trim().split("\n").filter(Boolean);
+
+        if (mode === "count") {
+          const counts = {};
+          for (const line of lines) {
+            try {
+              const obj = JSON.parse(line);
+              if (obj.type === "match") counts[obj.data.path.text] = (counts[obj.data.path.text] || 0) + 1;
+            } catch (_) {}
+          }
+          return Object.entries(counts).map(([f, c]) => `${f}: ${c} 处匹配`).join("\n");
+        }
+
+        if (mode === "files_only") {
+          const files = new Set();
+          for (const line of lines) {
+            try {
+              const obj = JSON.parse(line);
+              if (obj.type === "match" || obj.type === "begin") files.add(obj.data.path.text);
+            } catch (_) {}
+          }
+          return [...files].join("\n");
+        }
+
+        // content 模式
+        const results = [];
+        for (const line of lines) {
+          try {
+            const obj = JSON.parse(line);
+            if (obj.type === "match") {
+              const d = obj.data;
+              results.push(`${d.path.text}:${d.line_number}: ${d.lines.text.trimEnd()}`);
+            }
+          } catch (_) {}
+        }
+        if (results.length === 0) return `[无匹配] "${pattern}" 在 ${root}`;
+        return results.join("\n");
+      } catch (e) {
+        if (e.status === 1) return `[无匹配] "${pattern}" 在 ${root}`;
+        // ripgrep 失败, 回退到系统 grep
+      }
+    }
+
+    // 回退: 系统 grep
     const globFilter = glob ? ` --include="${glob}"` : "";
     const icFlag = ic ? " -i" : "";
+    const ctxFlag = context && context > 0 ? ` -C ${context}` : "";
     try {
-      const cmd = `grep -rn${icFlag}${globFilter} -m ${max} "${pattern.replace(/"/g, '\\"')}" "${root}"`;
+      const cmd = `grep -rn${icFlag}${ctxFlag}${globFilter} -m ${max} "${pattern.replace(/"/g, '\\"')}" "${root}"`;
       const output = execSync(cmd, { cwd: root, encoding: "utf-8", timeout: 15000, maxBuffer: 2 * 1024 * 1024 });
-      const lines = output.trim().split("\n").slice(0, max);
-      return lines.length > 0 ? lines.join("\n") : `[无匹配] "${pattern}" 在 ${root}`;
+      const lines = output.trim().split("\n").slice(0, mode === "count" ? 9999 : max);
+      if (lines.length === 0 || (lines.length === 1 && !lines[0])) return `[无匹配] "${pattern}" 在 ${root}`;
+      return lines.join("\n");
     } catch (e) {
       if (e.stdout) return e.stdout.trim().split("\n").slice(0, max).join("\n");
       return `[无匹配] "${pattern}" 在 ${root}`;
@@ -140,7 +314,12 @@ const writeTool = {
     const dir = path.dirname(filePath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(filePath, content, "utf-8");
-    return `[OK] 已写入 ${filePath} (${content.length} 字符, ${content.split("\n").length} 行)`;
+    // 语法检查
+    const err = syntaxCheck(filePath);
+    if (err) {
+      return `[OK] 已写入 ${filePath} (${content.length} 字符, ${content.split("\n").length} 行)\n[⚠ 语法警告] ${err}`;
+    }
+    return `[OK] 已写入 ${filePath} (${content.length} 字符, ${content.split("\n").length} 行) | ✓ 语法通过`;
   },
 };
 
@@ -352,21 +531,54 @@ const getDiagnosticsTool = {
 
 const skillTool = {
   name: "skill",
-  description: "执行一个技能模块: 从 Skills/ 目录加载预定义的技能脚本. 技能是一组预置指令",
+  description: "执行一个技能模块: 从 Skills/ 目录加载预定义的技能脚本. 技能定义了完成特定任务的方法论和步骤, 调用后会注入上下文指导后续操作",
   parameters: {
     name: { type: "string", required: true, description: "技能名, 如 'code_review' / 'refactor' / 'test_gen'" },
   },
   execute: async ({ name }) => {
     const skillDir = path.join(process.cwd(), "Skills");
-    if (!fs.existsSync(skillDir)) return `[无技能目录] ${skillDir} 不存在, 请创建 Skills/ 目录并放入 .js 脚本`;
-    const skillPath = path.join(skillDir, name + ".js");
+    if (!fs.existsSync(skillDir)) return `[无技能目录] ${skillDir} 不存在, 请创建 Skills/ 目录并放入 .cjs 或 .js 脚本`;
+
+    // 先尝试 .cjs (兼容 ESM package.json), 再尝试 .js
+    let skillPath = path.join(skillDir, name + ".cjs");
+    let ext = ".cjs";
     if (!fs.existsSync(skillPath)) {
-      const available = fs.readdirSync(skillDir).filter((f) => f.endsWith(".js")).map((f) => f.replace(".js", ""));
-      return `[无此技能] ${name}\n可用技能: ${available.length > 0 ? available.join(", ") : "(空)"}`;
+      skillPath = path.join(skillDir, name + ".js");
+      ext = ".js";
+    }
+    if (!fs.existsSync(skillPath)) {
+      const available = [];
+      if (fs.existsSync(skillDir)) {
+        fs.readdirSync(skillDir)
+          .filter((f) => f.endsWith(".cjs") || f.endsWith(".js"))
+          .forEach((f) => available.push(f.replace(/\.(cjs|js)$/, "")));
+      }
+      return `[无此技能] ${name}\n可用技能: ${available.length > 0 ? [...new Set(available)].join(", ") : "(空)"}`;
     }
     try {
       const mod = require(skillPath);
-      return `[技能: ${name}]\n${mod.description || "(无描述)"}\n指令: ${mod.instructions || "(无指令)"}`;
+      // 构建完整的技能上下文
+      const parts = [`[技能: ${name}]`];
+      if (mod.description) parts.push(`描述: ${mod.description}`);
+      if (mod.category) parts.push(`分类: ${mod.category}`);
+      if (mod.trigger) parts.push(`触发条件: ${mod.trigger}`);
+      if (mod.instructions) parts.push(`\n## 指令\n${mod.instructions}`);
+      if (mod.workflow && Array.isArray(mod.workflow)) {
+        parts.push(`\n## 工作流`);
+        mod.workflow.forEach((step, i) => parts.push(`${i + 1}. ${step}`));
+      }
+      if (mod.pitfalls && Array.isArray(mod.pitfalls)) {
+        parts.push(`\n## 常见陷阱`);
+        mod.pitfalls.forEach((p, i) => parts.push(`- ${p}`));
+      }
+      if (mod.examples && Array.isArray(mod.examples)) {
+        parts.push(`\n## 示例`);
+        mod.examples.forEach((ex, i) => parts.push(`### ${i + 1}.\n${ex}`));
+      }
+      // 注入必须遵循的规则
+      parts.push(`\n---`);
+      parts.push(`现在请严格按照以上技能指令执行。每个步骤都要真正执行（不描述、不跳过），完成后返回实际结果。`);
+      return parts.join("\n");
     } catch (e) {
       return `[技能加载失败] ${e.message}`;
     }

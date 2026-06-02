@@ -4,7 +4,7 @@ const readline = require("readline");
 const { spawn } = require("child_process");
 const Agent = require("./agent");
 const Tools = require("../Tools");
-const { listRecentTurns, searchHistory, getFileList, loadFileTurns } = require("../Mem/history");
+const { listRecentTurns, searchHistory, getFileList, loadFileTurns, listSessions, getSession, loadSessionTurns, globalSearch, endSession, startSession } = require("../Mem/history");
 
 const C = {
   reset: "\x1b[0m",
@@ -345,6 +345,8 @@ function showHelp() {
     ["/memory_clear", "清空所有记忆"], ["/compress", "手动压缩上下文"],
     ["/history [n]", "查看最近n条历史对话"], ["/history files", "查看历史文件列表"],
     ["/history search <q>", "搜索历史对话"], ["/history read <f>", "读取文件含完整工具调用"],
+    ["/sessions [n]", "列出对话session"], ["/session <id>", "查看某个session"],
+    ["/session_search <q>", "全局搜索session"],
     ["/tool_save <name>", "持久化保存工具"], ["/tool_list_saved", "列出持久化工具"],
     ["/tool_del_saved <name>", "删除持久化工具"],
     ["/trusted", "查看受信任工具"], ["/trust <name>", "永久信任工具"],
@@ -369,7 +371,7 @@ function showStatus() {
   console.log(`  模型: ${C.bold}${config.llm.model}${C.reset}  温度: ${config.llm.temperature}`);
   console.log(`  Tokens 累计: ${emoji("tokenIn")}${C.cyan}${usage.prompt}${C.reset}  ${emoji("tokenOut")}${C.magenta}${usage.completion}${C.reset}`);
   console.log(`  上下文使用: ${ctxBar(ctxPct)}`);
-  console.log(`  记忆: ${mem.entries || 0}/${mem.maxEntries || config.memory.maxEntries} 条目, 历史 ${mem.historyMessages || 0} 条`);
+  console.log(`  记忆: ROM${mem.romEntries || mem.entries || 0} RAM${mem.ramEntries || 0}  · 历史 ${mem.historyMessages || 0} 条`);
   const tools = Tools.listToolNames();
   console.log(`  工具: ${tools.length} 个 — ${tools.slice(0, 8).join(", ")}${tools.length > 8 ? " ..." : ""}`);
   console.log(div("="));
@@ -436,8 +438,10 @@ async function handleSlashCommand(input) {
       console.log(C.dim + `再见~ ${emoji("done")}` + C.reset);
       process.exit(0);
     case "reset":
+      endSession(agent.sessionId);
       agent.reset();
-      console.log(`${C.green}对话已重置${C.reset}`);
+      agent.sessionId = startSession();
+      console.log(`${C.green}对话已重置, 新 session 已创建${C.reset}`);
       break;
     case "tools": {
       const names = Tools.listToolNames();
@@ -563,7 +567,7 @@ async function handleSlashCommand(input) {
     case "memory": {
       const s = agent.memory.stats();
       console.log(div());
-      console.log(`  条目: ${s.entries}/${s.maxEntries}  历史消息: ${s.historyMessages}`);
+      console.log(`  条目: ROM${s.romEntries || s.entries} RAM${s.ramEntries || 0}  历史消息: ${s.historyMessages}`);
       console.log(div());
       break;
     }
@@ -572,7 +576,10 @@ async function handleSlashCommand(input) {
       const entries = agent.memory.getAllEntries().slice(-n);
       if (entries.length === 0) { console.log("(无记忆条目)"); break; }
       console.log(div());
-      for (const e of entries) console.log(`  ${C.yellow}#${e.id}${C.reset} ${C.dim}[${e.tags?.join(",") || "-"}]${C.reset} ${e.text}`);
+      for (const e of entries) {
+        const tag = e._type === "ram" ? `${C.yellow}[RAM]${C.reset}` : `${C.green}[ROM]${C.reset}`;
+        console.log(`  ${tag} ${C.yellow}#${e.id}${C.reset} ${C.dim}[${e.tags?.join(",") || "-"}]${C.reset} ${e.text}`);
+      }
       console.log(div());
       break;
     }
@@ -581,7 +588,10 @@ async function handleSlashCommand(input) {
       const results = agent.memory.searchEntries(rest, 10);
       if (results.length === 0) { console.log(`无匹配: ${rest}`); break; }
       console.log(div());
-      for (const e of results) console.log(`  ${C.yellow}#${e.id}${C.reset} ${e.text}`);
+      for (const e of results) {
+        const tag = e._type === "ram" ? `${C.yellow}[RAM]${C.reset}` : `${C.green}[ROM]${C.reset}`;
+        console.log(`  ${tag} ${C.yellow}#${e.id}${C.reset} ${e.text}`);
+      }
       console.log(div());
       break;
     }
@@ -593,8 +603,8 @@ async function handleSlashCommand(input) {
       break;
     }
     case "memory_clear":
-      agent.memory.clearEntries();
-      console.log(`${C.green}所有记忆条目已清空${C.reset}`);
+      agent.memory.clearAllEntries();
+      console.log(`${C.green}所有记忆条目已清空 (ROM+RAM)${C.reset}`);
       break;
     case "history": {
       const subCmd = rest ? rest.split(/\s+/)[0] : "";
@@ -660,6 +670,68 @@ async function handleSlashCommand(input) {
       const plainLen = Math.max(60, maxWidth());
       const wrapped = div("=") + "\n" + out;
       await pipeToPager(wrapped);
+      break;
+    }
+    case "sessions": {
+      const limit = rest ? parseInt(rest, 10) || 20 : 20;
+      const sessions = listSessions(limit);
+      if (sessions.length === 0) { console.log("(暂无对话 session)"); break; }
+      let out = `${C.bold + C.cyan}对话 Sessions${C.reset}  (${sessions.length})\n` + div() + "\n";
+      for (const [i, s] of sessions.entries()) {
+        const marker = s.status === "active" ? `${C.green}●${C.reset}` : `${C.dim}○${C.reset}`;
+        const active = s.status === "active" ? ` ${C.green}◀ 当前${C.reset}` : "";
+        out += `  ${String(i + 1).padStart(2)}. ${marker} [${(s.started || "?").slice(0, 16)}] ${s.title || "(无标题)"} | ${s.turnCount}轮${active}\n`;
+      }
+      out += "\n" + div() + `\n用 ${C.cyan}/session <编号>${C.reset} 查看详情, ${C.yellow}/session_search <关键词>${C.reset} 搜索`;
+      console.log(out);
+      break;
+    }
+    case "session": {
+      if (!rest) { console.log(`用法: /session <session_id 或列表序号>\n请先用 /sessions 查看列表`); break; }
+      const sessions = listSessions(999);
+      let sid = rest.trim();
+      if (/^\d+$/.test(sid)) {
+        const idx = parseInt(sid) - 1;
+        if (idx < 0 || idx >= sessions.length) { console.log(`序号超出范围 (1-${sessions.length})`); break; }
+        sid = sessions[idx].id;
+      }
+      const session = getSession(sid);
+      if (!session) { console.log(`未找到 session: ${sid}`); break; }
+      const turns = loadSessionTurns(sid, 30);
+      let out = `${C.bold + C.cyan}=== ${session.title || "(无标题)"} ===${C.reset}\n`;
+      out += `ID: ${C.dim}${session.id}${C.reset}  |  ${(session.started || "?").slice(0, 16)}  |  ${session.turnCount}轮\n` + div() + "\n";
+      if (turns.length === 0) { out += "(这个 session 暂无对话轮次)\n"; }
+      else {
+        for (const [i, t] of turns.entries()) {
+          out += `${C.yellow}[${i + 1}] ${(t.time || "?").slice(0, 16)}${C.reset}\n`;
+          if (t.cwd) out += `  ${C.dim}${t.cwd}${C.reset}\n`;
+          out += `  ${C.cyan}▸${C.reset} ${(t.user || "").slice(0, 400)}\n`;
+          out += `  ${C.green}◂${C.reset} ${(t.assistant || "").slice(0, 400)}\n\n`;
+        }
+        out += `(共 ${turns.length} 轮, 显示最近 30 轮)`;
+      }
+      out += "\n" + div();
+      await pipeToPager(out);
+      break;
+    }
+    case "session_search": {
+      if (!rest) { console.log("用法: /session_search <关键词> [数量]\n在整个历史中搜索相关 session"); break; }
+      const parts = rest.trim().split(/\s+/);
+      const maybeNum = parseInt(parts[parts.length - 1], 10);
+      const limit = !isNaN(maybeNum) ? maybeNum : 10;
+      const query = !isNaN(maybeNum) ? parts.slice(0, -1).join(" ") : rest.trim();
+      const results = globalSearch(query, limit);
+      if (results.length === 0) { console.log(`全史搜索未找到 "${query}"`); break; }
+      let out = `${C.bold + C.yellow}搜索: "${query}"${C.reset}  — ${results.length} 个 session\n` + div() + "\n";
+      for (const [i, r] of results.entries()) {
+        out += `${C.yellow}${i + 1}.${C.reset} [${(r.sessionStarted || "?").slice(0, 16)}] ${r.sessionTitle} | ${r.matchCount}处 | 得分${r.totalScore}\n`;
+        for (const m of r.topMatches) {
+          out += `  ${C.dim}·${C.reset} ${m.user.slice(0, 100)}\n`;
+        }
+        out += "\n";
+      }
+      out += div() + `\n用 ${C.cyan}/session <编号>${C.reset} 查看详情`;
+      console.log(out);
       break;
     }
     case "compress": {
@@ -963,6 +1035,7 @@ async function main() {
         `${C.cyan}tools${C.reset}`, `${C.cyan}status${C.reset}`, `${C.cyan}ctx${C.reset}`,
         `${C.cyan}temp${C.reset}`, `${C.cyan}token${C.reset}`,
         `${C.cyan}compress${C.reset}`, `${C.cyan}memory${C.reset}`, `${C.cyan}history${C.reset}`,
+        `${C.cyan}sessions${C.reset}`, `${C.cyan}session_search${C.reset}`,
         `${C.cyan}tool_save${C.reset}`, `${C.cyan}tool_del${C.reset}`,
       ];
       process.stdout.write("\n" + C.dim + menu.join("  ") + C.reset + "\n");
