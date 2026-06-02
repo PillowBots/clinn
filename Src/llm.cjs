@@ -24,7 +24,7 @@ class LLMClient {
     this.totalCompletionTokens = 0;
   }
 
-  async chat(messages, tools = null) {
+  async chat(messages, tools = null, signal = null) {
     const body = {
       model: this.model,
       messages,
@@ -39,12 +39,12 @@ class LLMClient {
       body.tool_choice = "auto";
     }
 
-    const result = await this._request("/chat/completions", JSON.stringify(body));
+    const result = await this._request("/chat/completions", JSON.stringify(body), signal);
     this._accumulateUsage(result.usage);
     return result;
   }
 
-  async chatStream(messages, onToken, tools = null) {
+  async chatStream(messages, onToken, tools = null, signal = null) {
     const body = {
       model: this.model,
       messages,
@@ -60,7 +60,7 @@ class LLMClient {
       body.tool_choice = "auto";
     }
 
-    return this._requestStream("/chat/completions", JSON.stringify(body), onToken);
+    return this._requestStream("/chat/completions", JSON.stringify(body), onToken, signal);
   }
 
   _accumulateUsage(usage) {
@@ -69,7 +69,7 @@ class LLMClient {
     if (usage.completion_tokens) this.totalCompletionTokens += usage.completion_tokens;
   }
 
-  _request(path, body) {
+  _request(path, body, signal = null) {
     const url = new URL(path, this.baseURL);
 
     const options = {
@@ -82,6 +82,7 @@ class LLMClient {
         Authorization: `Bearer ${this.apiKey}`,
       },
     };
+    if (signal) options.signal = signal;
 
     return new Promise((resolve, reject) => {
       const req = https.request(options, (res) => {
@@ -115,7 +116,7 @@ class LLMClient {
     });
   }
 
-  _requestStream(path, body, onToken) {
+  _requestStream(path, body, onToken, signal = null) {
     const url = new URL(path, this.baseURL);
 
     const options = {
@@ -128,6 +129,7 @@ class LLMClient {
         Authorization: `Bearer ${this.apiKey}`,
       },
     };
+    if (signal) options.signal = signal;
 
     return new Promise((resolve, reject) => {
       const req = https.request(options, (res) => {

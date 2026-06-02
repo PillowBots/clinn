@@ -22,7 +22,7 @@ const CLINN_CONFIG = path.join(CLINN_DIR, "config.json");
 const PKG_CONFIG = path.join(__dirname, "..", "config.json");
 const LOGO_PATH = path.join(__dirname, "..", "Logos", "StartLogo.txt");
 
-const VER = "0.9.3";
+const VER = "0.10.0";
 
 function ensureDir() { if (!fs.existsSync(CLINN_DIR)) fs.mkdirSync(CLINN_DIR, { recursive: true }); }
 function loadConfig() {
@@ -333,24 +333,6 @@ function App() {
   const [queue, setQueue] = useState([]);
   const abortRef = useRef(null);
 
-  // 桥接到模块级 SIGINT handler
-  _setInputFn = setInput;
-  _addMsgFn = addMsg;
-  useEffect(() => {
-    const sigintHandler = () => {
-      if (_abortCtrl) { _abortCtrl.abort(); return; }
-      if (_inputVal.length > 0) { _setInputFn?.(""); return; }
-    };
-    let count = 0;
-    const wrapped = () => {
-      count++;
-      if (count >= 3) process.exit(0);
-      setTimeout(() => { count = 0; }, 1000);
-      sigintHandler();
-    };
-    process.on("SIGINT", wrapped);
-    return () => process.removeListener("SIGINT", wrapped);
-  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => setMascotFace(kao.mascotForFrame()), 1000);
@@ -385,46 +367,54 @@ function App() {
 
     const controller = new AbortController();
     abortRef.current = controller;
-    _abortCtrl = controller;
+    let abortedByUser = false;
+    controller.signal.addEventListener("abort", () => { abortedByUser = true; });
 
     let buf = "";
     const toolMap = new Map();
 
     try {
+      // Promise.race 用于 Esc 中断：abortRef.abort() → reject → 中断
+      const abortPromise = new Promise((_, reject) => {
+        const onAbort = () => {
+          controller.signal.removeEventListener("abort", onAbort);
+          reject(new DOMException("Aborted", "AbortError"));
+        };
+        controller.signal.addEventListener("abort", onAbort);
+      });
+
       await Promise.race([
         getAgent().run(query, {
-          onContent: (tok) => {
-            buf += tok;
-            setStreaming(buf.replace(/\*\*(.+?)\*\*/g, "$1"));
-          },
-          onToolCall: (name, args = {}) => {
-            const short = Object.entries(args).map(([k, v]) => {
-              const s = String(v);
-              return k + "=" + (s.length > 50 ? s.slice(0, 50) + "\u2026" : s);
-            }).join(" ");
-            toolMap.set(name, { name, args: short, status: "running", result: "" });
-            setTools([...toolMap.values()]);
-          },
-          onToolResult: (name, result) => {
-            const t = toolMap.get(name);
-            if (t) {
-              t.status = "done";
-              t.result = String(result || "").slice(0, 500);
-            }
-            setTools([...toolMap.values()]);
-          },
-          onContextPct: (pct) => setCtxPct(pct),
+        signal: controller.signal,
+        onContent: (tok) => {
+          buf += tok;
+          setStreaming(buf.replace(/\*\*(.+?)\*\*/g, "$1"));
+        },
+        onToolCall: (name, args = {}) => {
+          const short = Object.entries(args).map(([k, v]) => {
+            const s = String(v);
+            return k + "=" + (s.length > 50 ? s.slice(0, 50) + "\u2026" : s);
+          }).join(" ");
+          toolMap.set(name, { name, args: short, status: "running", result: "" });
+          setTools([...toolMap.values()]);
+        },
+        onToolResult: (name, result) => {
+          const t = toolMap.get(name);
+          if (t) {
+            t.status = "done";
+            t.result = String(result || "").slice(0, 500);
+          }
+          setTools([...toolMap.values()]);
+        },
+        onContextPct: (pct) => setCtxPct(pct),
         }),
-        new Promise((_, reject) => {
-          controller.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
-        }),
+        abortPromise,
       ]);
     } catch (e) {
-      if (e.name === "AbortError" || e.message === "Aborted") {
-        addMsg("system", "\u23f9 已中断");
+      if (abortedByUser) {
         buf = "";
       } else {
-        addMsg("system", "\u2717 错误: " + e.message);
+        addMsg("system", "✗ " + e.message);
       }
     }
 
@@ -433,7 +423,7 @@ function App() {
     setThinking(false);
     setToolsCollapsed(true);
     abortRef.current = null;
-    _abortCtrl = null;
+    
 
     // 处理队列中的下一条
     setQueue(prev => {
@@ -793,9 +783,19 @@ function App() {
     : [];
   const slashClamped = Math.max(0, Math.min(slashIdx, slashFiltered.length - 1));
   slashRef.current = { filtered: slashFiltered, clamped: slashClamped };
+  const escRef = useRef(0);
 
   useInput((inputVal, key) => {
-    if (key.escape) process.exit(0);
+    if (key.escape) {
+      if (abortRef.current) { abortRef.current.abort(); return; }
+      if (input.length > 0) { setInput(""); return; }
+      // 双击 Esc 退出
+      const now = Date.now();
+      if (now - escRef.current < 500) { process.exit(0); }
+      escRef.current = now;
+      return;
+    }
+    escRef.current = 0;
     if (!slashInput || !slashFiltered.length) return;
     if (key.upArrow) setSlashIdx((slashClamped - 1 + slashFiltered.length) % slashFiltered.length);
     if (key.downArrow || key.tab) setSlashIdx((slashClamped + 1) % slashFiltered.length);
@@ -884,7 +884,7 @@ function App() {
             {" │ "}
             <Text color={ctxPct > 80 ? "yellow" : ctxPct > 90 ? "red" : "green"}>ctx</Text> {ctxPct}%
             {" │ "}
-            F1帮助 · Esc退出
+            F1帮助 · Esc清空 · 双击退出
           </Text>
         </Box>
 
@@ -915,7 +915,7 @@ function App() {
               value={input.length > 500 ? "…" + input.slice(-300) : input}
               onChange={v => {
                 setSlashIdx(0);
-                _inputVal = v;
+                
                 if (v.startsWith("…")) {
                   setInput(input.slice(0, Math.max(0, input.length - 300)) + v.slice(1));
                 } else {
@@ -935,9 +935,3 @@ function App() {
 }
 
 const { waitUntilExit } = render(<App />);
-
-// 模块级 ref：供 SIGINT handler 使用（Ink useInput 收不到 Ctrl+C）
-let _abortCtrl = null;
-let _inputVal = "";
-let _setInputFn = null;
-let _addMsgFn = null;

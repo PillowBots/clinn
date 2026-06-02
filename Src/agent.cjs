@@ -270,7 +270,7 @@ class Agent {
         { role: "system", content: "将以下对话压缩为一条200字以内的中文摘要,只输出摘要。" },
         { role: "user", content: text.slice(0, 4000) },
       ];
-      const res = await this.llm.chat(msgs);
+      const res = await this.llm.chat(msgs, null, signal);
       return (res.choices?.[0]?.message?.content || text.slice(0, 190)).slice(0, 190);
     } catch (_) {
       return text.slice(0, 190);
@@ -301,7 +301,7 @@ class Agent {
   }
 
   async run(userMessage, opts = {}) {
-    const { onContent, onToolCall, onToolResult, onThinking, onContextPct } = opts;
+    const { onContent, onToolCall, onToolResult, onThinking, onContextPct, signal } = opts;
     this.memory.addUser(userMessage);
     let messages = this._buildMessages();
     let finalResponse = "";
@@ -325,7 +325,7 @@ class Agent {
 
       if (onThinking) onThinking();
 
-      const result = await this.llm.chatStream(messages, onContent || null, activeTools);
+      const result = await this.llm.chatStream(messages, onContent || null, activeTools, signal);
 
       if (result.toolCalls && result.toolCalls.length > 0) {
         if (this._detectLoop(result.toolCalls)) {
@@ -402,7 +402,7 @@ class Agent {
             { role: "system", content: "用户刚完成一个任务。请生成一条15字以内的用户偏好摘要(用save_memory保存, tags='habit')。只输出纯文本,不要任何格式。" },
             { role: "user", content: `任务: ${userMessage.slice(0, 300)}\n结果摘要: ${finalResponse.slice(0, 200)}` },
           ];
-          const res = await this.llm.chat(msgs);
+          const res = await this.llm.chat(msgs, null, signal);
           const habit = res.choices?.[0]?.message?.content?.trim().slice(0, 100);
           if (habit) this.memory.addRamEntry(habit, ["habit"]);
         }
